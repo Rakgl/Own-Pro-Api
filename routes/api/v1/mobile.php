@@ -6,15 +6,10 @@ use App\Http\Controllers\Api\V1\Mobile\RegisterController;
 use App\Http\Controllers\Api\V1\Mobile\ForgetPasswordController;
 use App\Http\Controllers\Api\V1\Mobile\TranslationController;
 use App\Http\Controllers\Api\V1\Mobile\AppVersionController;
-use App\Http\Controllers\Api\V1\Mobile\BannerController;
-use App\Http\Controllers\Api\V1\Mobile\DoctorController;
 use App\Http\Controllers\Api\V1\Mobile\StaticContentController;
 use App\Http\Controllers\Api\V1\Mobile\FcmTokenController;
-use App\Http\Controllers\Api\V1\Mobile\HospitalController;
 use App\Http\Controllers\Api\V1\Mobile\NotificationController;
 use App\Http\Controllers\Api\V1\Mobile\SettingController;
-use App\Http\Controllers\Api\V1\Mobile\PharmacyController;
-use App\Http\Controllers\Api\V1\Mobile\SpecialityController;
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -47,26 +42,11 @@ Route::middleware(['auth:sanctum', 'ability:customer'])->group(function () {
 
     Route::get('/auth/get-user-info', [AuthController::class, 'getUserInfo']);
     Route::get('/auth/get-user-vehicle', [AuthController::class, 'getUserVehicleInfo']);
+
     Route::post('/fcm-token', [FcmTokenController::class, 'store']);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/mark-as-read', [NotificationController::class, 'markAsRead']);
 
     Route::get('/settings', [SettingController::class, 'index']);
-
-	Route::get('hospitals', [HospitalController::class, 'index']);
-	Route::get('hospitals/{id}', [HospitalController::class, 'show']);
-
-	Route::get('pharmacies', [PharmacyController::class, 'index']);
-	Route::get('pharmacies/{id}', [PharmacyController::class, 'show']);
-
-	Route::get('specialities', [SpecialityController::class, 'index']);
-    Route::get('specialities/{id}', [SpecialityController::class, 'show']);
-
-	Route::get('doctors', [DoctorController::class, 'index']);
-    Route::get('doctors/{id}', [DoctorController::class, 'show']);
-
-	Route::get('banners', [BannerController::class, 'index']);
-    Route::post('banners/{bannerId}/click', [BannerController::class, 'recordClick']);
-    Route::post('banners/impressions', [BannerController::class, 'recordImpressions']);
 });

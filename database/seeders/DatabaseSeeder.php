@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Phar;
 
 class DatabaseSeeder extends Seeder
 {
@@ -23,12 +22,7 @@ class DatabaseSeeder extends Seeder
             AnnouncementSeeder::class,
             StaticContentSeeder::class,
             NotificationSeeder::class,
-            AppVersionSeeder::class,
-			HospitalSeeder::class,
-			PharmacySeeder::class,
-			SpecialitySeeder::class,
-			DoctorSeeder::class,
-			BannerSeeder::class
-        ]);
+            AppVersionSeeder::class
+            ]);
     }
 }

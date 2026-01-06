@@ -24,7 +24,7 @@ class MobileAuthenticationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'username' => ['required'],
+            'phone' => ['required'],
 			'password' => ['required'],
         ];
     }

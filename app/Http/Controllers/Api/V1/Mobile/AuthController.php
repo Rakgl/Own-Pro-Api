@@ -22,18 +22,145 @@ class AuthController extends Controller
 {
     public function login(MobileAuthenticationRequest $request)
     {
-		$username = $request->username;
-		$user = User::where('username', $username)
-					->active()
-					->first();
+        // Trim any leading zeros from the phone number
+        $phone = ltrim($request->phone, '0');
+        $bonusMessage = '';
+        $isNewRegistration = false;
 
-		if(!$user) { 
-			return response()->json([
-                'success' => false,
-                'message' => 'User not found',
-            ]);
-		}
+        // Attempt to find an existing customer for the given phone & country code
+        $customer = Customer::where('phone', $phone)
+            ->where('country_code', $request->country_code)
+            ->active()
+            ->first();
 
+        // If no customer exists, perform auto-registration
+        if (!$customer) {
+            DB::beginTransaction();
+            try {
+                // Create a new customer using defaults (use phone as name if not provided)
+                $customer = Customer::create([
+                    'name'           => $request->name ? $request->name : $phone,
+                    'email'          => $request->email ? $request->email : null,
+                    'country_code'   => $request->country_code,
+                    'phone'          => $phone,
+                    'status'         => 'ACTIVE',
+                    'created_by'     => null,
+                    'updated_by'     => null,
+                    'update_num'     => 0,
+                    'points'         => 0.00,
+                    'balance'        => 0,
+                    'first_login_at' => Carbon::now(),
+                ]);
+
+                // Update membership if needed
+                CustomerHelper::updateCustomerMembership($customer->id);
+
+                // Create a default vehicle using request values or fallback defaults
+                $defaultVehicleDefaults = Helper::defaultVehicle();
+                CustomerVehicle::create([
+                    'brand_id'    => $request->brand_id ? $request->brand_id : $defaultVehicleDefaults['brand_id'],
+                    'model_id'    => $request->model_id ? $request->model_id : $defaultVehicleDefaults['model_id'],
+                    'color_id'    => $request->color_id ? $request->color_id : $defaultVehicleDefaults['color_id'],
+                    'year_id'     => $request->year_id ? $request->year_id : $defaultVehicleDefaults['year_id'],
+                    'plate'       => $request->plate ? $request->plate : null,
+                    'is_default'  => true,
+                    'customer_id' => $customer->id,
+                    'status'      => 'ACTIVE',
+                ]);
+
+                // Create a new user record for the customer
+                $user = User::create([
+                    'name'         => $request->name ? $request->name : $phone,
+                    'email'        => $request->email ? $request->email : null,
+                    'image'        => null,
+                    'username'     => $phone,
+                    'password'     => Hash::make($request->password),
+                    'customer_id'  => $customer->id,
+                    'status'       => 'ACTIVE',
+                    'created_by'   => null,
+                    'updated_by'   => null,
+                    'update_num'   => 0,
+                ]);
+
+                // Create an IdTag for the new user
+                IdTag::create([
+                    'entity_id' => $user->id,
+                    'type'      => 'Customer',
+                    'status'    => 'ACTIVE'
+                ]);
+
+                // Apply the bonus as a welcome gift on first registration
+                $bonusMessage = CustomerHelper::getBonusBalance($customer);
+
+                DB::commit();
+                $isNewRegistration = true;
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Registration failed: ' . $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        // At this point, we have a customer record. Ensure there is an associated user.
+        $user = User::where('customer_id', $customer->id)
+            ->active()
+            ->first();
+
+        if (!$user) {
+            DB::beginTransaction();
+            try {
+                // If no default vehicle exists, create one
+                $customerVehicle = CustomerVehicle::where('customer_id', $customer->id)
+                    ->where('is_default', true)
+                    ->first();
+                if (!$customerVehicle) {
+                    $defaultVehicleDefaults = Helper::defaultVehicle();
+                    CustomerVehicle::create([
+                        'brand_id'    => $request->brand_id ? $request->brand_id : $defaultVehicleDefaults['brand_id'],
+                        'model_id'    => $request->model_id ? $request->model_id : $defaultVehicleDefaults['model_id'],
+                        'color_id'    => $request->color_id ? $request->color_id : $defaultVehicleDefaults['color_id'],
+                        'year_id'     => $request->year_id ? $request->year_id : $defaultVehicleDefaults['year_id'],
+                        'plate'       => $request->plate ? $request->plate : null,
+                        'is_default'  => true,
+                        'customer_id' => $customer->id,
+                        'status'      => 'ACTIVE',
+                    ]);
+                }
+
+                // Create the user record
+                $user = User::create([
+                    'name'         => $request->name ? $request->name : $phone,
+                    'email'        => $request->email ? $request->email : null,
+                    'image'        => null,
+                    'username'     => $phone,
+                    'password'     => Hash::make($request->password),
+                    'customer_id'  => $customer->id,
+                    'status'       => 'ACTIVE',
+                    'created_by'   => null,
+                    'updated_by'   => null,
+                    'update_num'   => 0,
+                ]);
+
+                // Create an IdTag for the new user
+                IdTag::create([
+                    'entity_id' => $user->id,
+                    'type'      => 'Customer',
+                    'status'    => 'ACTIVE'
+                ]);
+
+                DB::commit();
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User registration failed: ' . $e->getMessage(),
+                ], 500);
+            }
+        }
+
+        // Verify the password
         if (!Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
@@ -41,8 +168,14 @@ class AuthController extends Controller
             ]);
         }
 
+        // Generate tokens for the user
         $data = $this->getTokenAndRefreshToken($user);
 
+        // Optionally, if this was a new registration, include bonus information in the response.
+        if ($isNewRegistration) {
+            $data['bonus_message'] = $bonusMessage;
+            $data['has_received_bonus'] = $customer->has_received_bonus;
+        }
 
         return response()->json([
             'success' => true,
