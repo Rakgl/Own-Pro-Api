@@ -7,12 +7,15 @@ use App\Http\Controllers\Api\V1\Admin\Security\UserController;
 use App\Http\Controllers\Api\V1\Admin\Security\RoleController;
 use App\Http\Controllers\Api\V1\Admin\Security\RolePermissionController;
 use App\Http\Controllers\Api\V1\Admin\Configuration\SettingController;
+use App\Http\Controllers\Api\V1\Admin\Configuration\TranslationController;
 
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::get('/settings', [SettingController::class, 'index']);
 Route::post('/auth/refresh-token', [AuthController::class, 'refreshToken']);
+
+Route::get('/translations/{locale}', [TranslationController::class, 'getTranslationsByLocale']);
 
 // Authenticated routes
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -26,7 +29,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // Auth
         Route::post('/auth/register', [RegisterController::class, 'register']);
-
 		Route::get('/auth/get-user', [AuthController::class, 'getUser']);
 
         // Users
@@ -53,5 +55,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
         // Settings
         Route::get('/general-settings', [SettingController::class, 'show']);
         Route::post('/general-settings/update', [SettingController::class, 'update']);
+
+        // Translation
+         Route::apiResource('translations',TranslationController::class);
     });
 });

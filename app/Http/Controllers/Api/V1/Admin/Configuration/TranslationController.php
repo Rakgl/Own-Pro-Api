@@ -1,140 +1,268 @@
 <?php
 
-namespace App\Http\Controllers\Api\V1\Admin;
+namespace App\Http\Controllers\Api\V1\Admin\Configuration;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Http\Requests\Api\V1\Admin\TranslationRequest;
 use App\Models\Translation;
-use App\Http\Resources\Api\V1\Admin\TranslationResource;
-use App\Http\Resources\Api\V1\Admin\AdminTranslationResource;
+use Illuminate\Http\JsonResponse;
+use Exception;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class TranslationController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Display a paginated list of translations for the admin panel.
+     *
+     * @param Request $request
+     * @return JsonResponse
+     */
+    public function index(Request $request): JsonResponse
     {
-        $translations = Translation::where(function ($q) use ($request) {
-            if($request->search) {
-                $q->where('key', 'LIKE', '%' . $request->search . '%')
-                    ->orWhere('value', 'LIKE', '%' . $request->search . '%');
-            }
+        $perPage = $request->input('per_page', 15);
 
-            if ($request->key) {
-                $q->where('key', 'LIKE', '%' . $request->key . '%');
-            }
+        // Fetch paginated translations from the database
+        $translationsPaginator = Translation::query()
+            ->where(function ($query) use ($request) {
+                // General search across key and value columns
+                if ($request->filled('search')) {
+                    $searchTerm = '%' . $request->search . '%';
+                    $query->where('key', 'LIKE', $searchTerm)
+                        ->orWhere('value', 'LIKE', $searchTerm);
+                }
 
-            if ($request->value) {
-                $q->where('value', 'LIKE', '%' . $request->value . '%');
-            }
+                // Specific search for the 'key' column
+                if ($request->filled('key')) {
+                    $query->where('key', 'LIKE', '%' . $request->key . '%');
+                }
 
-            if ($request->platform) {
-                $q->where('platform', $request->platform);
-            }
+                if ($request->filled('platform')) {
+                    if($request->platform != 'ALL') {
+                        $query->where('platform', $request->platform);
+                    }
+                }
+            })
+            ->where('status', '!=', 'DELETED')
+            ->orderBy('updated_at', 'desc')
+            ->paginate($perPage);
 
-        })->notDelete()->orderBy('created_at', 'desc')->paginate($request->per_page);
-
-        $translations = TranslationResource::collection($translations)->response()->getData(true);
-
+        // Manually structure the response to match the format the Vue component expects,
+        // which was previously created by the API Resource Collection.
         return response()->json([
             'success' => true,
-            'message' => 'success',
-            'data' => $translations['data'],
-            'meta' => [
-                'current_page' => $translations['meta']['current_page'],
-                'last_page' => $translations['meta']['last_page'],
-                'total' => $translations['meta']['total'],
+            'message' => 'Translations retrieved successfully.',
+            'data' => [
+                'data' => $translationsPaginator->items(),
+                'links' => [
+                    'first' => $translationsPaginator->url(1),
+                    'last' => $translationsPaginator->url($translationsPaginator->lastPage()),
+                    'prev' => $translationsPaginator->previousPageUrl(),
+                    'next' => $translationsPaginator->nextPageUrl(),
+                ],
+                'meta' => [
+                    'current_page' => $translationsPaginator->currentPage(),
+                    'from' => $translationsPaginator->firstItem(),
+                    'last_page' => $translationsPaginator->lastPage(),
+                    'path' => $translationsPaginator->path(),
+                    'per_page' => $translationsPaginator->perPage(),
+                    'to' => $translationsPaginator->lastItem(),
+                    'total' => $translationsPaginator->total(),
+                ],
             ]
         ]);
     }
 
-    public function store(TranslationRequest $request)
+    /**
+     * Store a newly created translation in storage.
+     *
+     * @param TranslationRequest $request
+     * @return JsonResponse
+     */
+    public function store(Request $request): JsonResponse
     {
-        $status = Array();
-
-        Translation::create([
-            'key' => $request->key,
-            'value' => $request->value,
-            'platform' => $request->platform,
-            'status' => $request->status,
+        $validator = Validator::make($request->all(), [
+            'key' => 'required|string|max:100|unique:translations,key',
+            'value' => 'required|array',
+            'platform' => ['required', 'string', Rule::in(['ADMIN', 'MOBILE'])],
+            'status' => ['required', 'string', Rule::in(['ACTIVE', 'INACTIVE'])],
         ]);
 
-        $status['success'] = true;
-        $status['message'] = 'Translation created successfully';
-        return response()->json($status);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            $validatedData = $validator->validated();
+
+            // **FIX:** Manually encode the 'value' array to a JSON string.
+            $validatedData['value'] = json_encode($validatedData['value']);
+
+            $translation = Translation::create($validatedData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Translation created successfully.',
+                'data' => $translation,
+            ], 201);
+
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create translation.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
-    // public function show($id)
-    // {
-    //     $status = array();
+    /**
+     * Display the specified translation.
+     *
+     * @param Translation $translation
+     * @return JsonResponse
+     */
+    public function show(Translation $translation): JsonResponse
+    {
+        // Manually decode the value before sending the response.
+        $translation->value = json_decode($translation->value);
 
-    //     $translation = Translation::find($id);
+        return response()->json([
+            'success' => true,
+            'message' => 'Translation retrieved successfully.',
+            'data' => $translation,
+        ]);
+    }
 
-    //     if(!$translation) {
-    //         $status["success"] = false;
-    //         $status["message"] = "Translation not found.";
-    //         return response()->json($status);
-    //     }
+    /**
+     * Update the specified translation in storage.
+     *
+     * @param Request $request
+     * @param Translation $translation
+     * @return JsonResponse
+     */
+    public function update(Request $request, Translation $translation): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'key' => ['required', 'string', 'max:100', Rule::unique('translations')->ignore($translation->id)],
+            'value' => 'required|array',
+            'platform' => ['required', 'string', Rule::in(['ADMIN', 'MOBILE'])],
+            'status' => ['required', 'string', Rule::in(['ACTIVE', 'INACTIVE'])],
+        ]);
 
-    //     $status["success"] = true;
-    //     $status["message"] = "Shop found.";
-    //     $status["data"] = new TranslationResource($translation);
-    //     return response()->json($status);
-    // }
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed.',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
-    // public function update(TranslationRequest $request, $id)
-    // {
-    //     $status = array();
+        try {
+            $validatedData = $validator->validated();
 
-    //     $translation = Translation::find($id);
+            // **FIX:** Manually encode the 'value' array to a JSON string.
+            $validatedData['value'] = json_encode($validatedData['value']);
 
-    //     if(!$translation) {
-    //         $status["success"] = false;
-    //         $status["message"] = "Translation not found.";
-    //         return response()->json($status);
-    //     }
+            $translation->update($validatedData);
 
-    //     $translation->update([
-    //         'key' => $request->key,
-    //         'value' => $request->value,
-    //         'platform' => $request->platform,
-    //         'status' => $request->status,
-    //     ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Translation updated successfully.',
+                'data' => $translation,
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update translation.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
-    //     $status['success'] = true;
-    //     $status['message'] = 'Translation updated successfully';
-    //     $status['data'] = new TranslationResource($translation);
-    //     return response()->json($status);
-    // }
+    /**
+     * Remove the specified translation from storage by changing its status to DELETED.
+     *
+     * @param Translation $translation
+     * @return JsonResponse
+     */
+    public function destroy(Translation $translation): JsonResponse
+    {
+        try {
+            if ($translation->status !== 'DELETED') {
+                $translation->status = 'DELETED';
+                $translation->save();
+            }
 
-    // public function destroy($id)
-    // {
-    //     $status = array();
+            return response()->json([
+                'success' => true,
+                'message' => 'Translation deleted successfully.'
+            ], 200);
 
-    //     $translation = Translation::find($id);
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete translation.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 
-    //     if(!$translation) {
-    //         $status["success"] = false;
-    //         $status["message"] = "Translation not found.";
-    //         return response()->json($status);
-    //     }
+    /**
+     * Get all active translations formatted for a specific locale.
+     *
+     * @param string $locale The language code (e.g., 'en', 'fr').
+     * @return JsonResponse
+     */
+    public function getTranslationsByLocale(string $locale): JsonResponse
+    {
+        Log::info($locale);
+        try {
+            $translations = Translation::where('status', 'ACTIVE')->get(['key', 'value']);
+            $formattedTranslations = [];
 
-    //     $translation->update(
-    //         [
-    //             'status' => 3
-    //         ]
-    //     );
+            foreach ($translations as $translation) {
+                $valueDecoded = json_decode($translation->value, true);
+                if (isset($valueDecoded[$locale])) {
+                    $this->setNestedArrayValue($formattedTranslations, $translation->key, $valueDecoded[$locale]);
+                }
+            }
 
-    //     $status['success'] = true;
-    //     $status['message'] = 'Translation deleted successfully';
-    //     return response()->json($status);
-    // }
+            return response()->json($formattedTranslations);
 
-    // public function getTranslations(Request $request){
-    //     $translations = Translation::admin()->active()->notDelete()->get();
-    //     return response()->json([
-    //         'success' => true,
-    //         'message' => 'Success.',
-    //         'data' => AdminTranslationResource::collection($translations),
-    //     ]);
-    // }
+        } catch (Exception $e) {
+            return response()->json([
+                'error' => 'Could not fetch translations.',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper function to set a value in a nested array using a dot-notation key.
+     *
+     * @param array &$array The array to modify.
+     * @param string $key The dot-notation key (e.g., 'nav.headings.core_administration').
+     * @param mixed $value The value to set.
+     * @return void
+     */
+    private function setNestedArrayValue(array &$array, string $key, $value): void
+    {
+        $keys = explode('.', $key);
+        $temp = &$array;
+
+        foreach ($keys as $nestedKey) {
+            if (!isset($temp[$nestedKey]) || !is_array($temp[$nestedKey])) {
+                $temp[$nestedKey] = [];
+            }
+            $temp = &$temp[$nestedKey];
+        }
+
+        $temp = $value;
+    }
 }

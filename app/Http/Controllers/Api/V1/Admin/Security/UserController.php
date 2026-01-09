@@ -179,8 +179,8 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
+            'message' => "User have been updated.",
             'data' =>  $this->show($user->id)->getData(true),
-            'message' => "User have been updated."
         ]);
     }
 
@@ -209,12 +209,12 @@ class UserController extends Controller
 
         return response()->json([
             'success' => true,
+            'message' => "User have been updated.",
             'data' =>  $this->show($user->id)->getData(true),
-            'message' => "User have been updated."
         ]);
     }
 
-	public function changePassword(ChangePasswordRequest $request, $userId) // Use ChangePasswordRequest
+	public function changePassword(ChangePasswordRequest $request, $userId)
     {
         $user = User::find($userId);
 
@@ -222,18 +222,17 @@ class UserController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => "User not found."
-            ], 404); // Use appropriate HTTP status codes
+            ], 404);
         }
 
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json([
                 'success' => false,
                 'message' => 'The current password is not correct.',
-                // Sending detailed field errors like this is good practice
                 'errors' => [
                     'current_password' => ['The current password is not correct.'],
                 ],
-            ], 422); // 422 Unprocessable Entity for validation-like errors
+            ], 422);
         }
 
         $user->update(['password' => Hash::make($request->new_password)]);
@@ -241,7 +240,7 @@ class UserController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Password has been updated successfully.',
-            'data' => new UserIndexResource($user) // Or null, or a simpler success message
+            'data' => new UserIndexResource($user)
         ]);
     }
 

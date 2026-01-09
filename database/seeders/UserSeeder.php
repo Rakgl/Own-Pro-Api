@@ -52,7 +52,7 @@ class UserSeeder extends Seeder
                 [
                     'id' => (string) Str::uuid(),
                     'name' => $userData['name'],
-                    'email' => '', // Add appropriate email if needed
+                    'email' => '',
                     'password' => $userData['password'],
                     'role_id' => $userData['role_id'],
                     'status' => 'ACTIVE',
