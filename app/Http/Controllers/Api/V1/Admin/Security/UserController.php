@@ -135,7 +135,7 @@ class UserController extends Controller
 		$userLogins = $user->logins()->orderBy('created_at', 'desc')->limit(15)->get();
         return response()->json([
             'data' => new UserShowResource($user),
-			'items' => UserLoginResource::collection($userLogins)
+			'items' => UserLoginResource::collection($userLogins),
         ]);
     }
 

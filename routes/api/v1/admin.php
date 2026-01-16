@@ -12,8 +12,20 @@ use App\Http\Controllers\Api\V1\Admin\Configuration\TranslationController;
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/account-recovery', [AuthController::class, 'submitAccountRecovery']);
+Route::post('/auth/forgot-password', [AuthController::class, 'initiateForgotPassword']);
 Route::get('/settings', [SettingController::class, 'index']);
 Route::post('/auth/refresh-token', [AuthController::class, 'refreshToken']);
+
+Route::get('/debug-ip', function (Request $request) {
+    return response()->json([
+        'laravel_request_ip' => $request->ip(),
+        'server_remote_addr' => $_SERVER['REMOTE_ADDR'] ?? 'not set',
+        'header_x_forwarded_for' => $request->header('X-Forwarded-For'),
+        'all_headers' => $request->headers->all(),
+    ]);
+});
+
 
 Route::get('/translations/{locale}', [TranslationController::class, 'getTranslationsByLocale']);
 

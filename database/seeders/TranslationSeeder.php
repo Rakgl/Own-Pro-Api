@@ -4,52 +4,58 @@ namespace Database\Seeders;
 
 use App\Models\Translation;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 
 class TranslationSeeder extends Seeder
 {
     /**
      * Run the database seeds.
-     *
-     * @return void
      */
-    public function run()
+    public function run(): void
     {
-        $translations = $this->getAllTranslations();
-
-        foreach ($translations as $translation) {
-            Translation::updateOrCreate(
-                [
-                    'key' => $translation['key'],
-                    'platform' => $translation['platform'] ?? 'ADMIN',
-                ],
-                [
-                    'value' => json_encode([
-                        'en' => $translation['en'],
-                        'kh' => $translation['kh'],
-                    ]),
-                    'status' => $translation['status'] ?? 'ACTIVE',
-                ]
-            );
-        }
+        $this->getAllTranslations()
+            ->each(fn ($item) => $this->saveTranslation($item));
     }
 
     /**
-     * Aggregates all translation arrays into a single array.
-     *
-     * @return array
+     * Helper to persist translation to the database.
      */
-    private function getAllTranslations(): array
+    private function saveTranslation(array $data): void
     {
-        return array_merge(
-            $this->getGlobalTranslations(),
-            $this->getNavMenuTranslations(),
+        Translation::updateOrCreate(
+            [
+                'key'      => $data['key'],
+                'platform' => $data['platform'] ?? 'ADMIN',
+            ],
+            [
+                'value'  => json_encode([
+                    'en' => $data['en'],
+                    'kh' => $data['kh'],
+                ]),
+                'status' => $data['status'] ?? 'ACTIVE',
+            ]
         );
     }
 
+    /**
+     * Merges all translation groups into one collection.
+     */
+    private function getAllTranslations(): Collection
+    {
+        return collect([
+            ...$this->getGlobalTranslations(),
+            ...$this->getNavMenuTranslations(),
+            ...$this->getDataTableTranslations(),
+        ]);
+    }
+
+    /**
+     * Global application strings.
+     */
     private function getGlobalTranslations(): array
     {
         return [
-            ['key' => 'account_settings', 'en' => 'Account Settings', 'kh' => 'ការកំណត់គណនី', 'platform' => 'MOBILE', 'status' => 'ACTIVE'],
+            ['key' => 'account_settings', 'en' => 'Account Settings', 'kh' => 'ការកំណត់គណនី', 'platform' => 'MOBILE'],
             ['key' => 'welcome', 'en' => 'Welcome to our application!', 'kh' => 'សូមស្វាគមន៍មកកាន់កម្មវិធីរបស់យើង!'],
             ['key' => 'hello_name', 'en' => 'Hello, {name}!', 'kh' => 'ជំរាបសួរ, {name}!'],
             ['key' => 'select_language', 'en' => 'Select Language', 'kh' => 'ជ្រើសរើសភាសា'],
@@ -77,8 +83,7 @@ class TranslationSeeder extends Seeder
     }
 
     /**
-     * Returns navigation menu translations.
-     * @return array
+     * Navigation and Sidebar menu strings.
      */
     private function getNavMenuTranslations(): array
     {
@@ -106,6 +111,44 @@ class TranslationSeeder extends Seeder
             ['key' => 'nav.items.account_recovery', 'en' => 'Account Recovery', 'kh' => 'ការស្តារគណនី'],
             ['key' => 'nav.items.ai_assitant', 'en' => 'AI Assistant', 'kh' => 'ជំនួយការ AI'],
             ['key' => 'nav.items.ocr', 'en' => 'OCR Scanner', 'kh' => 'ម៉ាស៊ីនស្កេន OCR'],
+        ];
+    }
+
+    /**
+     * Data Table components and dynamic feedback strings.
+     */
+    private function getDataTableTranslations(): array
+    {
+        return [
+            ['key' => 'common.index', 'en' => '#', 'kh' => 'ល.រ'],
+            ['key' => 'common.name', 'en' => 'Name', 'kh' => 'ឈ្មោះ'],
+            ['key' => 'common.description', 'en' => 'Description', 'kh' => 'ការពិពណ៌នា'],
+            ['key' => 'common.status', 'en' => 'Status', 'kh' => 'ស្ថានភាព'],
+            ['key' => 'common.actions', 'en' => 'Actions', 'kh' => 'សកម្មភាព'],
+            ['key' => 'common.active', 'en' => 'Active', 'kh' => 'សកម្ម'],
+            ['key' => 'common.inactive', 'en' => 'Inactive', 'kh' => 'មិនសកម្ម'],
+            ['key' => 'common.unknown', 'en' => 'UNKNOWN', 'kh' => 'មិនស្គាល់'],
+            ['key' => 'common.asc', 'en' => 'Asc', 'kh' => 'លំដាប់ឡើង'],
+            ['key' => 'common.desc', 'en' => 'Desc', 'kh' => 'លំដាប់ចុះ'],
+            ['key' => 'common.hide', 'en' => 'Hide', 'kh' => 'លាក់'],
+            ['key' => 'common.reset', 'en' => 'Reset', 'kh' => 'កំណត់ឡើងវិញ'],
+            ['key' => 'common.view_options', 'en' => 'View', 'kh' => 'បង្ហាញ'],
+            ['key' => 'common.toggle_columns', 'en' => 'Toggle columns', 'kh' => 'ជ្រើសរើសជួរ'],
+            ['key' => 'common.clear_filters', 'en' => 'Clear filters', 'kh' => 'សម្អាតការជ្រើសរើស'],
+            ['key' => 'common.rows_per_page', 'en' => 'Rows per page', 'kh' => 'ចំនួនជួរក្នុងមួយទំព័រ'],
+            ['key' => 'common.enter_name', 'en' => 'Enter name', 'kh' => 'បញ្ចូលឈ្មោះ'],
+            ['key' => 'common.update_success', 'en' => 'Updated successfully!', 'kh' => 'បានធ្វើបច្ចុប្បន្នភាពដោយជោគជ័យ!'],
+            ['key' => 'common.create_success', 'en' => 'Created successfully!', 'kh' => 'បានបង្កើតដោយជោគជ័យ!'],
+            ['key' => 'common.delete_success', 'en' => 'Deleted successfully!', 'kh' => 'បានលុបដោយជោគជ័យ!'],
+            ['key' => 'common.permissions_updated', 'en' => 'Permissions updated!', 'kh' => 'បានធ្វើបច្ចុប្បន្នភាពសិទ្ធិរួចរាល់!'],
+            ['key' => 'common.are_you_sure', 'en' => 'Are you absolutely sure?', 'kh' => 'តើអ្នកប្រាកដជាចង់ធ្វើសកម្មភាពនេះមែនទេ?'],
+            ['key' => 'nav.add_new_role', 'en' => 'Add New Role', 'kh' => 'បន្ថែមតួនាទីថ្មី'],
+            ['key' => 'common.selected_count', 'en' => '{count} selected', 'kh' => 'បានជ្រើសរើស {count}'],
+            ['key' => 'common.page_info', 'en' => 'Page {current} of {total}', 'kh' => 'ទំព័រទី {current} នៃ {total}'],
+            ['key' => 'common.selected_rows', 'en' => '{count} of {total} row(s) selected.', 'kh' => 'បានជ្រើសរើស {count} ក្នុងចំណោម {total} ជួរ។'],
+            ['key' => 'common.delete_warning', 'en' => 'This action cannot be undone. This will permanently delete "{name}" and remove the data.', 'kh' => 'សកម្មភាពនេះមិនអាចត្រឡប់ក្រោយបានទេ។ វានឹងលុប "{name}" ជាអចិន្ត្រៃយ៍ពីប្រព័ន្ធ។'],
+            ['key' => 'common.edit_description', 'en' => 'Make changes to the details here. Click save when you\'re done.', 'kh' => 'កែប្រែព័ត៌មានលម្អិតនៅទីនេះ។ ចុចរក្សាទុកនៅពេលអ្នករួចរាល់។'],
+            ['key' => 'common.create_role_description', 'en' => 'Define the properties for the new role. Required fields are marked with (*).', 'kh' => 'កំណត់លក្ខណៈសម្បត្តិសម្រាប់តួនាទីថ្មី។ ផ្នែកដែលចាំបាច់ត្រូវបានចំណាំដោយ (*).'],
         ];
     }
 }

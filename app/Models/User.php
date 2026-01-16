@@ -95,15 +95,15 @@ class User extends Authenticatable implements Auditable
 		return $this->belongsTo(User::class, 'updated_by');
 	}
 
-	public function customer()
-	{
-		return $this->belongsTo(Customer::class, 'customer_id');
-	}
+	// public function customer()
+	// {
+	// 	return $this->belongsTo(Customer::class, 'customer_id');
+	// }
 
-	public function stations()
-	{
-		return $this->belongsToMany(Station::class, 'station_user');
-	}
+	// public function stations()
+	// {
+	// 	return $this->belongsToMany(Station::class, 'station_user');
+	// }
 
 	public function logins() {
 		return $this->hasMany(UserLogin::class);
