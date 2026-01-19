@@ -14,21 +14,41 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
     public function login(AuthenticationRequest $request)
     {
+        // 1. Rate Limiting: 5 attempts per minute
+        $key = 'login|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            $seconds = RateLimiter::availableIn($key);
+            return response()->json([
+                'success' => false,
+                'message' => 'Too many login attempts. Please try again in '.$seconds.' seconds.',
+            ], 429);
+        }
+
         try {
             $user = User::where('username', $request->username)
                 ->where('status', 'ACTIVE')
                 ->first();
 
             if (!$user || !Hash::check($request->password, $user->password)) {
+                RateLimiter::hit($key, 60);
+
                 return response()->json([
                     'success' => false,
                     'message' => 'Incorrect username or password.',
                 ], 401);
+            }
+
+            RateLimiter::clear($key);
+
+            if ($request->hasSession()) {
+                Auth::guard('web')->login($user);
+                $request->session()->regenerate();
             }
 
             $data = $this->getTokenAndRefreshToken($user);
@@ -100,7 +120,7 @@ class AuthController extends Controller
         ];
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
         try {
             $user = auth()->user();
@@ -112,57 +132,49 @@ class AuthController extends Controller
                 ], 401);
             }
 
+            // Session Logout
+            Auth::guard('web')->logout();
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+
             // Get current token
-            $currentToken = auth()->user()->currentAccessToken();
-            if (!$currentToken) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Not authenticated.',
-                ], 401);
+            $currentToken = $user->currentAccessToken();
+            if ($currentToken && !($currentToken instanceof \Laravel\Sanctum\TransientToken)) {
+                 // Begin transaction
+                DB::beginTransaction();
+                try {
+                    // Revoke (not delete) the refresh token
+                    DB::table('refresh_tokens')
+                        ->where('id', $currentToken->name)
+                        ->update([
+                            'revoked' => true,
+                            'updated_at' => Carbon::now()
+                        ]);
+
+                    // Delete the current access token
+                    $currentToken->delete();
+                    DB::commit();
+                } catch (\Exception $e) {
+                     DB::rollBack();
+                     \Log::error('Token revocation failed: ' . $e->getMessage());
+                }
             }
 
-            // Begin transaction
-            DB::beginTransaction();
-            try {
-                // Revoke (not delete) the refresh token
-                DB::table('refresh_tokens')
-                    ->where('id', $currentToken->name)
-                    ->update([
-                        'revoked' => true,
-                        'updated_at' => Carbon::now()
-                    ]);
+            // Log the logout
+            UserLogin::create([
+                'type' => 'Logout',
+                'user_id' => $user->id,
+                'ip_address' => request()->ip(),
+                'browser' => request()->header('User-Agent'),
+                'logout_at' => Carbon::now(),
+            ]);
 
-                // Delete the current access token
-                $currentToken->delete();
-
-                // Log the logout
-                UserLogin::create([
-                    'type' => 'Logout',
-                    'user_id' => $user->id,
-                    'ip_address' => request()->ip(),
-                    'browser' => request()->header('User-Agent'),
-                    'logout_at' => Carbon::now(),
-                ]);
-
-                DB::commit();
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Logout successfully.',
-                ]);
-
-            } catch (\Exception $e) {
-                DB::rollBack();
-                \Log::error('Logout failed: ' . $e->getMessage(), [
-                    'user_id' => $user->id,
-                    'trace' => $e->getTraceAsString()
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Logout failed. Please try again.'
-                ], 500);
-            }
+            return response()->json([
+                'success' => true,
+                'message' => 'Logout successfully.',
+            ]);
 
         } catch (\Exception $e) {
             \Log::error('Logout failed: ' . $e->getMessage(), [
@@ -217,10 +229,32 @@ class AuthController extends Controller
                 ->where('name', $refreshTokenRecord->id)
                 ->delete();
 
-            $expireSeconds = (int) env('SANCTUM_TOKEN_EXPIRATION', 7200);
+            // Revoke the *current* refresh token (Rotation)
+            DB::table('refresh_tokens')
+                ->where('id', $refreshTokenRecord->id)
+                ->update(['revoked' => true]);
 
-            // Create new access token using same refresh token ID
-            $token = $user->createToken($refreshTokenRecord->id, ['admin'], now()->addSeconds($expireSeconds));
+            $expireSeconds = (int) env('SANCTUM_TOKEN_EXPIRATION', 7200);
+            $refreshTokenExpiration = (int) env('SANCTUM_REFRESH_EXPIRATION', 604800);
+
+            // Generate NEW refresh token
+            $newRefreshToken = Str::random(64);
+            $newRefreshTokenId = Str::uuid();
+
+            // Store NEW refresh token
+            DB::table('refresh_tokens')->insert([
+                'id' => $newRefreshTokenId,
+                'user_id' => $user->id,
+                'name' => $refreshTokenRecord->name, // Keep same device info
+                'token' => hash('sha256', $newRefreshToken),
+                'expires_at' => Carbon::now()->addSeconds($refreshTokenExpiration),
+                'revoked' => false,
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+
+            // Create new access token linked to the NEW refresh token ID
+            $token = $user->createToken($newRefreshTokenId, ['admin'], now()->addSeconds($expireSeconds));
 
             DB::commit();
 
@@ -230,7 +264,7 @@ class AuthController extends Controller
                     'access_token' => $token->plainTextToken,
                     'token_type' => 'Bearer',
                     'expires_in' => $expireSeconds,
-                    'refresh_token' => $request->refresh_token, // Return same refresh token
+                    'refresh_token' => $newRefreshToken, // Return NEW refresh token
                 ],
                 'message' => 'Refresh token successfully.'
             ]);

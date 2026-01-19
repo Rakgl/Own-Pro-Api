@@ -26,21 +26,7 @@ class RolePermissionSeeder extends Seeder
 			'RolePermission',
 			'Translation',
 		];
-
-		// $modelWithReadAndExportOnly = [
-		// 	'NewCustomerReport',
-		// 	'CustomerRegisterByDateReport',
-		// 	'CustomerByMembershipReport',
-		// 	'TopUpByDateReport',
-		// 	'TopUpByCustomerReport',
-		// 	'VehicleModelByCustomerReport',
-		// 	'StationByProvinceReport',
-		// 	'ChargeTransactionByDateReport',
-		// 	'ChargeTransactionByMonthReport',
-		// 	'ChargeTransactionByYearReport',
-		// 	'ChargeTransactionByStationReport',
-		// 	'ChargeTransactionByCustomerReport',
-		// ];
+		
 		$permissions = [];
 		foreach ($modelWithAllActions as $modelWithAllAction) {
 			$actions = ['CREATE', 'READ', 'UPDATE', 'DELETE', 'AUDIT'];
@@ -56,21 +42,6 @@ class RolePermissionSeeder extends Seeder
 				];
 			}
 		}
-		
-		// foreach ($modelWithReadAndExportOnly as $modelWithReadAndExportOnly) {
-		// 	$actions = ['READ', 'EXPORT'];
-		// 	foreach ($actions as $action) {
-		// 		$modelName = preg_replace('/([a-z0-9])([A-Z])/', '$1-$2', $modelWithReadAndExportOnly);
-		// 		$permissions[] = [
-		// 			'id' => Str::uuid(),
-		// 			'module' => $modelName,
-		// 			'name' => $action,
-		// 			'slug' => strtolower($modelName) . ':' . strtolower($action),
-		// 			'developer_only' => 0,
-		// 			'status' => 'ACTIVE',
-		// 		];
-		// 	}
-		// }
 		
         DB::table('permissions')->insert($permissions);
 
