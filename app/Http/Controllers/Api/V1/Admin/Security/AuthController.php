@@ -60,7 +60,6 @@ class AuthController extends Controller
         }
     }
 
-
     public function getTokenAndRefreshToken($user)
     {
         $request = request();
@@ -272,7 +271,6 @@ class AuthController extends Controller
 
     public function getUser()
     {
-
         $user = auth()->user();
 
         if(!$user){
